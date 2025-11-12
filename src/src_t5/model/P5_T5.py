@@ -1,40 +1,24 @@
+import argparse
+import copy
 from dataclasses import dataclass
-
-from transformers.models.t5.modeling_t5 import (
-    T5Stack,
-    T5Block,
-    T5LayerNorm,
-    T5LayerSelfAttention,
-    T5LayerFF,
-    T5LayerCrossAttention,
-    T5PreTrainedModel,
-    T5ForConditionalGeneration,
-)
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
-import copy
-
+from transformers import T5Config, T5Tokenizer
 from transformers.modeling_outputs import (
-    ModelOutput,
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
+    ModelOutput,
 )
-from transformers.modeling_utils import (
-    PreTrainedModel,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
+from transformers.models.t5.modeling_t5 import (
+    T5Block,
+    T5ForConditionalGeneration,
+    T5LayerNorm,
+    T5Stack,
 )
 from transformers.utils import logging
-from transformers import BeamScorer, BeamSearchScorer, T5Tokenizer, T5Config
-
-import argparse
 
 logger = logging.get_logger(__name__)
 
@@ -62,7 +46,8 @@ class JointEncoder(T5Stack):
 
         ## Set maximum 512 whole words in a source text
         self.whole_word_embeddings = nn.Embedding(
-            512, config.d_model  ## config.d_model is 768 for base
+            512,
+            config.d_model,  ## config.d_model is 768 for base
         )
         self.init_weights()
         self.model_parallel = False
@@ -84,7 +69,6 @@ class JointEncoder(T5Stack):
         output_hidden_states=None,
         return_dict=None,
     ):
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if inputs_embeds is None:
@@ -125,7 +109,6 @@ class JointEncoder(T5Stack):
         hidden_states = self.dropout(inputs_embeds)
 
         if self.config.num_layers > 0:
-
             assert self.block[0].layer[0].SelfAttention.has_relative_attention_bias
 
             seq_length = L
@@ -250,7 +233,6 @@ class P5_T5(T5ForConditionalGeneration):
         self.decoder.set_input_embeddings(new_embeddings)
 
     def extend_vocab(self, vocab_size):
-
         new_shared = nn.Embedding(vocab_size, self.config.d_model)
         old_weight = self.shared.weight.data.detach().clone()
         old_vocab_size = old_weight.size(0)
@@ -294,7 +276,6 @@ class P5_T5(T5ForConditionalGeneration):
         alpha=2,
         **kwargs,
     ):
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
@@ -354,7 +335,7 @@ class P5_T5(T5ForConditionalGeneration):
         assert self.config.tie_word_embeddings is True
 
         if self.config.tie_word_embeddings:
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         # if return_hidden_state:
 
@@ -406,7 +387,6 @@ class P5_T5(T5ForConditionalGeneration):
         return_hidden_state=False,
         **kwargs,
     ):
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
@@ -477,7 +457,7 @@ class P5_T5(T5ForConditionalGeneration):
         assert self.config.tie_word_embeddings is True
 
         if self.config.tie_word_embeddings:
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         # if return_hidden_state:
 
@@ -525,7 +505,6 @@ class P5_T5(T5ForConditionalGeneration):
         encoder_outputs=None,
         **kwargs,
     ):
-
         if past is not None:
             input_ids = input_ids[:, -1:]
 
@@ -570,9 +549,9 @@ class P5_T5(T5ForConditionalGeneration):
 
         if is_encoder_decoder:
             assert encoder_outputs is not None
-            encoder_outputs[
-                "last_hidden_state"
-            ] = encoder_outputs.last_hidden_state.index_select(0, expanded_return_idx)
+            encoder_outputs["last_hidden_state"] = (
+                encoder_outputs.last_hidden_state.index_select(0, expanded_return_idx)
+            )
             model_kwargs["encoder_outputs"] = encoder_outputs
 
         return input_ids, model_kwargs
@@ -604,7 +583,6 @@ class P5_T5(T5ForConditionalGeneration):
         train_discriminator=False,
         **kwargs,
     ):
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
@@ -693,7 +671,7 @@ class P5_T5(T5ForConditionalGeneration):
         assert self.config.tie_word_embeddings is True
 
         if self.config.tie_word_embeddings:
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 
